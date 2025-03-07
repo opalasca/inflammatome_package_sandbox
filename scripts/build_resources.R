@@ -139,7 +139,7 @@ genes.entrez.biomart <- read_tsv("data/genes.entrez.tsv",show_col_types = FALSE)
 
 genes.uniprot = genes.uniprot.biomart[!is.na(genes.uniprot.biomart$uniprotswissprot),]
 genes.refseq = genes.refseq.biomart[!is.na(genes.refseq.biomart$refseq_mrna),]
-
+genes.entrez = genes.entrez.biomart[!is.na(genes.entrez.biomart$entrezgene_id),]
 
 genes.uniprot <- read_tsv("data/genes.uniprot.tsv",show_col_types = FALSE) 
 genes.refseq <- read_tsv("data/genes.refseq.tsv",show_col_types = FALSE)
