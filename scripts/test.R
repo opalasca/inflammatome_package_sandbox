@@ -1,4 +1,10 @@
 
+ranked.list <- read_tsv("data/05_agg_list_unionmarkers_latest.tsv",show_col_types = FALSE) 
+
+all.sets.ens <- read_tsv("data/inflammationGeneSetsEnsembl.tsv",show_col_types = FALSE)
+all.sets.entrez <- read_tsv("data/inflammationGeneSetsEntrez.tsv",show_col_types = FALSE)
+
+
 ########## User input data #########################
 ####################################################
 
@@ -7,78 +13,24 @@
 igan <- read_tsv("data/test_datasets/02_GSE175759_IgAN_ctl.tsv",show_col_types = FALSE) 
 
 data <- process_data(igan,id="ENSG.ID")
-gsea <- run_gsea(results_list=data, gene_sets=all.sets, id_col_name="ENSG.ID", sorting_value_col_name = "stat")
-plot_gsea(gsea@result, "igan")
+gene_sets <- get_gene_sets("Ensembl")
+gsea_analysis(data, gene_sets, id_col_name="ENSG.ID", sorting_value_col_name = "stat", name="data")
 plot_volcano(data, logFC_col_name = "log2FoldChange", pval_col_name = "pvalue", name="igan")
-
 
 ms <- read_tsv("data/test_datasets/02_GSE138614_MS_CTL.tsv", show_col_types = FALSE)
 
 data <- process_data(ms,id="ENSG.ID")
-gsea <- run_gsea(results_list=data, gene_sets=all.sets, id_col_name="ENSG.ID", sorting_value_col_name = "stat")
+gsea <- run_gsea(results_list=data, gene_sets=all.sets.ens, id_col_name="ENSG.ID", sorting_value_col_name = "stat")
 plot_gsea(gsea@result, "ms")
 plot_volcano(data, logFC_col_name = "log2FoldChange", pval_col_name = "pvalue", name="ms")
 
 UC.Andersen <- read.delim("data/test_datasets/DE.res.UC.Andersen.raw.tsv", row.names = 1, header = TRUE, sep = "\t")
 UC.Andersen$id = rownames(UC.Andersen)
 
-
-########## Extract biomart  ##########################
-######################################################
-
-ensembl <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
-a=ensembl@attributes
-genes.uniprot <- getBM(attributes = c("uniprotswissprot", "ensembl_gene_id", "hgnc_symbol","gene_biotype"), mart = ensembl)
-genes.refseq <- getBM(attributes = c("refseq_mrna", "ensembl_gene_id", "hgnc_symbol","gene_biotype"), mart = ensembl)
-genes.refseq.ncrna <- getBM(attributes = c("refseq_ncrna", "ensembl_gene_id", "hgnc_symbol","gene_biotype"), mart = ensembl)
-genes.entrez <- getBM(attributes = c("entrezgene_id", "ensembl_gene_id", "hgnc_symbol","gene_biotype"), mart = ensembl)
-
-length(unique(genes.refseq$refseq_mrna))
-length(unique(genes.refseq$ensembl_gene_id))
-length(unique(genes.uniprot$ensembl_gene_id))
-length(unique(genes.uniprot$uniprotswissprot))
-
-
-#write.table(genes.ensembl, paste(datadir,"genes.ensembl.UC.Andersen.tsv",sep=""), sep = "\t", row.names = F, quote=F)
-
-genes.ensembl.in.list <- genes.ensembl[genes.ensembl$ensembl_gene_id %in% ranked.list$ENSG.ID, ]
-
-# Remove duplicates; for each uniprot ID keep the first ensembl ID, alphabetically
-genes.ensembl.in.list <- genes.ensembl.in.list[order(genes.ensembl.in.list$uniprotswissprot, genes.ensembl.in.list$ensembl_gene_id), ]
-genes.ensembl.in.list.dedup <- genes.ensembl.in.list[!duplicated(genes.ensembl.in.list$uniprotswissprot), ]
-
-df.prot.dedup=merge(df.prot, genes.ensembl.in.list.dedup[c(1,2)],by.x="UniprotID",by.y="uniprotswissprot")
-length(unique(df.prot.dedup$UniprotID))
-
-
-
-
-
-
-
-
-
-
-## UC Andersen -----------------------------------------------------------------
-UC.andersen <- UC.andersen %>% 
-  group_by(ENSG.ID) %>% 
-  filter (P.Value == min(P.Value))
-
-gsea_UC.andersen <- run_gsea(UC.andersen, all.sets, "stat")
-p_andersen <- dotplot(gsea_UC.andersen, x = "NES", size= "GeneRatio",showCategory = 13) + ggtitle("UC Andersen stat value") 
-p_andersen
-
-gsea_UC.andersen.lfc <- run_gsea(UC.andersen, all.sets, "logFC")
-dotplot(gsea_UC.andersen.lfc, x = "NES", size= "GeneRatio",showCategory = 13) + ggtitle("UC Andersen LFC") 
-
-ggsave("figures/05_UC_andersen_dotplot.png", 
-       p_andersen,
-       h = 9,
-       w = 10)
-
-
-
-
+data <- process_data(UC.Andersen,id="id",keytype="Uniprot")
+gsea <- run_gsea(results_list=data, gene_sets=all.sets.entrez, id_col_name="ENTREZID", sorting_value_col_name = "t")
+plot_gsea(gsea@result, "UC.proteomics")
+plot_volcano(data, logFC_col_name = "logFC", pval_col_name = "P.Value", name="UC.proteomics",keytype="uniprot")
 
 
 
