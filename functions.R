@@ -2,8 +2,9 @@
 #rm(list = ls())
 #dir="~/Desktop/Work/inflammatome/inflammatome_resource"
 #setwd(dir)
+dir=getwd()
 
-figures=paste0(dir,"figures/")
+figures=paste0(dir,"/figures/")
 #resultdir=paste0(dir,"results/")
 ifelse(!dir.exists(figures), dir.create(figures), FALSE)
 #ifelse(!dir.exists(resultdir), dir.create(resultdir), FALSE)
