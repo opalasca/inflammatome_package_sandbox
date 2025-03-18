@@ -1,8 +1,8 @@
 
-ranked.list <- read_tsv("data/05_agg_list_unionmarkers_latest.tsv",show_col_types = FALSE) 
+#ranked.list <- read_tsv("data/05_agg_list_unionmarkers_latest.tsv",show_col_types = FALSE) 
 
-all.sets.ens <- read_tsv("data/inflammationGeneSetsEnsembl.tsv",show_col_types = FALSE)
-all.sets.entrez <- read_tsv("data/inflammationGeneSetsEntrez.tsv",show_col_types = FALSE)
+#all.sets.ens <- read_tsv("data/inflammationGeneSetsEnsembl.tsv",show_col_types = FALSE)
+#all.sets.entrez <- read_tsv("data/inflammationGeneSetsEntrez.tsv",show_col_types = FALSE)
 
 
 ########## User input data #########################
@@ -15,15 +15,16 @@ igan <- read_tsv("data/test_datasets/02_GSE175759_IgAN_ctl.tsv",show_col_types =
 data <- process_input_data(igan,id="ENSG.ID", keytype="ensembl")
 gene_sets <- get_gene_sets("Ensembl")
 gsea_results <- gsea_analysis(data, gene_sets, sorting_value_col_name = "stat", name="igan")
-plot_volcano(data, logFC_col_name = "log2FoldChange", pval_col_name = "pvalue", name="igan", keytype="Ensembl")
+plot_volcano(data, keytype="Ensembl", logFC_col_name = "log2FoldChange", pval_col_name = "pvalue")
+plot_volcano_and_stripplot(data, keytype="Ensembl", logFC_col_name = "log2FoldChange", pval_col_name = "pvalue", stat_col_name = "stat")
 
 
 ms <- read_tsv("data/test_datasets/02_GSE138614_MS_CTL.tsv", show_col_types = FALSE)
 
-data <- process_data(ms,id="ENSG.ID")
-gsea <- run_gsea(data=data, gene_sets=gene_sets, id_col_name="ENSG.ID", sorting_value_col_name = "stat")
-plot_gsea(gsea@result, "ms")
-plot_volcano(data, logFC_col_name = "log2FoldChange", pval_col_name = "pvalue", name="ms")
+data <- process_input_data(ms,id="ENSG.ID",keytype="ensembl")
+gene_sets <- get_gene_sets("Ensembl")
+gsea_results <- gsea_analysis(data, gene_sets, sorting_value_col_name = "stat", name="ms")
+plot_volcano(data, logFC_col_name = "log2FoldChange", pval_col_name = "pvalue", name="ms",keytype="Ensembl")
 
 UC.Andersen <- read.delim("data/test_datasets/DE.res.UC.Andersen.raw.tsv", header = TRUE, sep = "\t")
 
@@ -32,6 +33,12 @@ gene_sets <- get_gene_sets("Uniprot")
 gsea_results <- gsea_analysis(data, gene_sets, sorting_value_col_name = "t", name="data")
 plot_volcano(data, logFC_col_name = "logFC", pval_col_name = "P.Value", name="UC.proteomics",keytype="Entrez")
 
+
+
+#install.packages("shiny")
+#library(shiny)
+runGitHub("inflammatome_package_sandbox", "opalasca")
+runApp("app")
 
 
 ## More datasets to test ------------------------------------------------------------------

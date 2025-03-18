@@ -1,16 +1,15 @@
-# Clear workspace --------------------------------------------------------------
-#rm(list = ls())
-#dir="~/Desktop/Work/inflammatome/inflammatome_resource"
-#setwd(dir)
-dir=getwd()
+# Remove setwd line! 
+dir="~/Desktop/Work/inflammatome/inflammatome_resource"
+setwd(dir)
 
-figures=paste0(dir,"/figures/")
+
+#figures=paste0(dir,"/figures/")
 #resultdir=paste0(dir,"results/")
-ifelse(!dir.exists(figures), dir.create(figures), FALSE)
+#ifelse(!dir.exists(figures), dir.create(figures), FALSE)
 #ifelse(!dir.exists(resultdir), dir.create(resultdir), FALSE)
 
 # Install packages (if not already present) and Load libraries ---------------------------------------------------------------
-list.of.packages <- c("ggplot2","ggrepel","patchwork","msigdbr","tidyverse","GO.db","org.Hs.eg.db","readxl",
+list.of.packages <- c("here","fs","ggplot2","ggrepel","patchwork","msigdbr","tidyverse","GO.db","org.Hs.eg.db","readxl",
                       "biomaRt","clusterProfiler","enrichplot","tidytext","dplyr","stringr", "DOSE")
 
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
@@ -18,9 +17,18 @@ if(length(new.packages)) BiocManager::install(new.packages)
 
 lapply(list.of.packages, library, character.only=TRUE)
 
+here::i_am("functions.R")
+figures_dir <- here("figures")
+fs::dir_create(figures_dir)
 
-# Read inflammatome list  --------------------------------------------------------------------
-ranked.list <- read_tsv("data/ranked_list_inflammatome.tsv",show_col_types = FALSE) 
+# Read inflammatome list -------------------------------
+data_file <- here("data", "ranked_list_inflammatome.tsv")
+if (file_exists(data_file)) {
+  ranked.list <- read_tsv(data_file, show_col_types = FALSE)
+} else {
+  stop("Error: Data file not found. Ensure 'data/ranked_list_inflammatome.tsv' exists.")
+}
+
 
 # Convert gene names to Entrez IDs ------
 symbol.entrez = bitr(ranked.list$Gene.name, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
@@ -304,7 +312,7 @@ plot_gsea <- function(gsea_result_df, name){
 
 
 # Volcano plot
-plot_volcano <- function(data, logFC_col_name="log2FoldChange", pval_col_name="pvalue", name="data", keytype="Ensembl"){ 
+plot_volcano <- function(data, keytype="Ensembl", logFC_col_name="log2FoldChange", pval_col_name="pvalue", name="data"){ 
   
   theme_custom <- theme_classic() + theme(
       plot.title = element_text(size = 8))
@@ -356,7 +364,8 @@ plot_volcano <- function(data, logFC_col_name="log2FoldChange", pval_col_name="p
     labs(
       x = "Log Fold Change",
       y = "-log10(P-Value)",
-      title = paste0(name,", inflammatome (top 2000)")
+      #title = paste0(name,", inflammatome (top 2000)")
+      title = paste0("inflammatome (top 2000)")
     ) +
     theme_custom
     #coord_cartesian(ylim = c(0, 20))
@@ -367,11 +376,11 @@ plot_volcano <- function(data, logFC_col_name="log2FoldChange", pval_col_name="p
   p2 <- ggplot(data %>% arrange(top_100), aes(x = adj_logFC, y = adj_pval, color = top_100))+ #, alpha = top_100)) +
     geom_point(size = .4, alpha=0.6) +
     scale_color_manual(values = c("no" = "grey", "yes" = "red")) +
-    #scale_alpha_manual(values = c("no" = 0.3, "yes" = 1)) +
     labs(
       x = "Log Fold Change",
       y = "-log10(P-Value)",
-      title = paste0(name,", inflammation signature (top 100)")
+      #title = paste0(name,", inflammation signature (top 100)")
+      title = paste0("inflammation signature (top 100)")
       ) +
     theme_custom
     #coord_cartesian(ylim = c(0, 20))
@@ -387,6 +396,131 @@ plot_volcano <- function(data, logFC_col_name="log2FoldChange", pval_col_name="p
   
 }
 
+plot_volcano_and_stripplot <- function(data,  keytype="Ensembl", logFC_col_name="log2FoldChange", pval_col_name="pvalue", stat_col_name="stat"){ 
+  
+  theme_custom <- theme_classic() + theme(
+    plot.title = element_text(size = 8))
+  
+  theme_custom_strip_plot <- theme_classic() + theme(
+    plot.title = element_blank(),
+    #axis.text.x = element_blank(),
+    #axis.ticks.x = element_blank(),
+    #axis.title.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid = element_blank(),
+    axis.line.y = element_blank()  # Add this line to hide the y-axis line
+    
+  )
+  
+  keytype <- tolower(keytype)
+  
+  if (keytype == "ensembl") {
+    data <- data %>%
+      arrange(desc(.data[[pval_col_name]])) %>%
+      mutate(idx = row_number()) %>%
+      mutate(
+        top_2000 = if_else(id.mapped %in% filter(top2000, Position <= 2000)$ENSG.ID, "yes", "no"),
+        top_100 = if_else(id.mapped %in% filter(top2000, Position <= 100)$ENSG.ID, "yes", "no")
+      ) %>%
+      mutate(
+        top_2000 = factor(top_2000, levels = c("no", "yes")),  # Ensure "no" is plotted first
+        top_100 = factor(top_100, levels = c("no", "yes"))
+      )  %>%
+      mutate(
+        # **Cap -log10(p-value) at 20**
+        adj_pval = pmin(-log10(.data[[pval_col_name]]), 20),
+        # **Cap log fold change between -10 and 10**
+        adj_logFC = pmax(pmin(.data[[logFC_col_name]], 10), -10)
+      )}
+  #pval_col_name="P.Value"; logFC_col_name="logFC"; name="UC.proteomics" 
+  else{
+    data <- data %>%
+      arrange(desc(.data[[pval_col_name]])) %>%
+      mutate(idx = row_number()) %>%
+      mutate(
+        top_2000 = if_else(id.mapped %in% filter(top2000, Position <= 2000)$ENTREZID, "yes", "no"),
+        top_100 = if_else(id.mapped %in% filter(top2000, Position <= 100)$ENTREZID, "yes", "no")
+      ) %>%
+      mutate(
+        top_2000 = factor(top_2000, levels = c("no", "yes")),  # Ensure "no" is plotted first
+        top_100 = factor(top_100, levels = c("no", "yes"))
+      )  %>%
+      mutate(
+        # **Cap -log10(p-value) at 20**
+        adj_pval = pmin(-log10(.data[[pval_col_name]]), 20),
+        # **Cap log fold change between -10 and 10**
+        adj_logFC = pmax(pmin(.data[[logFC_col_name]], 10), -10)
+      )  }
+  
+  p1 <- ggplot(data %>% arrange(top_2000), aes(x = adj_logFC, y = adj_pval, color = top_2000 ))+ # , alpha = top_2000)) +
+    geom_point(size = .4, alpha=0.6) +
+    scale_color_manual(values = c("no" = "grey", "yes" = "red")) +
+    #scale_alpha_manual(values = c("no" = 0.5, "yes" = 0.5)) +
+    labs(
+      x = logFC_col_name,
+      y = "-log10(p-value)",
+      #title = paste0(name,", inflammatome (top 2000)")
+      title = paste0("inflammatome (top 2000)")
+    ) +
+    theme_custom
+
+  #print(p1)
+  ggsave(paste0("figures/volcano_2000",".png"), p1, height = 3, width = 3)
+  
+  p2 <- ggplot(data %>% arrange(top_100), aes(x = adj_logFC, y = adj_pval, color = top_100))+ #, alpha = top_100)) +
+    geom_point(size = .4, alpha=0.6) +
+    scale_color_manual(values = c("no" = "grey", "yes" = "red")) +
+    labs(
+      x = logFC_col_name,
+      y = "-log10(p-value)",
+      #title = paste0(name,", inflammation signature (top 100)")
+      title = paste0("inflammation signature (top 100)")
+    ) +
+    theme_custom
+
+  #print(p2)
+  ggsave(paste0("figures/volcano_100",".png"), p2, height = 3, width = 3)
+  
+  max_abs_stat <- max(abs(data[[stat_col_name]]), na.rm = TRUE)
+  
+  p3 <- ggplot(data, aes(y = factor(1), x = .data[[stat_col_name]], color = top_2000)) +
+    geom_jitter(width = 0, height = 0.2, size = 0.4) +
+    scale_color_manual(values = c("no" = "grey", "yes" = "red")) +
+    geom_vline(xintercept = 0, color = "darkgrey") +
+    scale_x_continuous(limits = c(-max_abs_stat, max_abs_stat)) +
+    labs(
+      x = stat_col_name,
+      y = "",
+      title = ""
+    ) +
+    theme_custom_strip_plot
+  
+  p4 <- ggplot(data, aes(y = factor(1), x = .data[[stat_col_name]], color = top_100)) +
+    geom_jitter(width = 0, height = 0.2, size = 0.4) +
+    scale_color_manual(values = c("no" = "grey", "yes" = "red")) +
+    geom_vline(xintercept = 0, color = "darkgrey") +
+    scale_x_continuous(limits = c(-max_abs_stat, max_abs_stat)) +
+    labs(
+      x = stat_col_name,
+      y = "",
+      title = ""
+    ) +
+    theme_custom_strip_plot
+  
+  #print(p3)
+  ggsave(paste0("figures/strip_plot_2000",".png"), p3, height = 3, width = 3)
+  
+  #print(p4)
+  ggsave(paste0("figures/strip_plot_100",".png"), p4, height = 3, width = 3)
+  
+  combined_plot <- p1 + p2 + p3 + p4 + plot_layout(ncol = 2, guides = "collect", heights = c(2, 1))
+  
+  # Print and save the combined plot
+  print(combined_plot)
+  ggsave(paste0("figures/volcano",".png"), combined_plot, height = 3, width = 6)  # Wider panel
+  
+}
 
 
 
