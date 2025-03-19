@@ -1,7 +1,7 @@
 
 
 # Install packages (if not already present) and Load libraries ---------------------------------------------------------------
-list.of.packages <- c("shiny","DT","readr","shinyjs")
+list.of.packages <- c("shiny","DT","readr","shinyjs","shinycssloaders")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) BiocManager::install(new.packages)
 
@@ -11,8 +11,11 @@ options(shiny.maxRequestSize = 100 * 1024^2)
 
 source("functions.R")
 
+
 # Define UI ---------
 ui <- fluidPage(
+  
+  useShinyjs(),  # Enable shinyjs in UI
   titlePanel("GSEA and Volcano Plot Analysis"),
   
   sidebarLayout(
@@ -22,114 +25,246 @@ ui <- fluidPage(
       selectInput("keytype", "Select Keytype", choices = c("Ensembl", "Uniprot", "Entrez", "Refseq", "Symbol")),
       selectInput("sort_col", "Select Sorting Column", choices = NULL),
       actionButton("run_gsea", "Run GSEA"),
+      br(), br(),  # Adds space
       selectInput("logFC_col", "Select LogFC Column", choices = NULL),
       selectInput("pval_col", "Select P-Value Column", choices = NULL),   
-      selectInput("stat_col", "Select Stat Column", choices = NULL),
+      #selectInput("stat_col", "Select Stat Column", choices = NULL),
       actionButton("run_volcano", "Run Volcano Plot"),
-      uiOutput("volcano_inputs")
+      uiOutput("volcano_inputs"),
+      hr(),  
+      downloadButton("download_data", "Download Dataset"),
+      downloadButton("download_gsea", "Download GSEA Results")
     ),
     
     mainPanel(
-      plotOutput("gsea_plot"),
-      DTOutput("gsea_table"),  # Add this line to display the GSEA table
-      DTOutput("table"),
-      plotOutput("volcano_plot")
-    )
-  )
+      tabsetPanel(
+        tabPanel("Data Preview",
+                 DTOutput("table", width = "80%", height = "300px")
+        ),
+        tabPanel("GSEA Results", 
+                 plotOutput("gsea_plot", height = "500px") %>% withSpinner(color="#0dc5c1"), 
+                 DTOutput("gsea_table", width = "80%", height = "300px") 
+        ),
+        tabPanel("Volcano Plot", 
+                 plotOutput("volcano_plot", height = "500px")
+        )
+      )
+    )),
+    
+    tags$head(
+      tags$style(HTML("
+    table.dataTable.compact tbody td {
+      padding: 2px 6px !important;
+      font-size: 12px !important
+    }
+  "))
+ )
 )
 
-
-#Server --------------
-
+# Server ---------
 server <- function(input, output, session) {
   
-  # Reactive block to read the dataset (without rownames)
+  # Reactive block to read the dataset
   dataset <- reactive({
-    req(input$file)  # Ensure file is uploaded
+    req(input$file)  
     data <- read.delim(input$file$datapath, header = TRUE, sep = "\t")
-    data$ID <- data[[1]]  # Set the first column as ID column
-    updateSelectInput(session, "id_col", choices = colnames(data), selected = colnames(data)[1])
-    updateSelectInput(session, "sort_col", choices = colnames(data), selected = colnames(data)[2])
-    updateSelectInput(session, "logFC_col", choices = colnames(data))
-    updateSelectInput(session, "pval_col", choices = colnames(data))
-    updateSelectInput(session, "stat_col", choices = colnames(data))
+    data$ID <- data[[1]]  # Set first column as ID
+    
+    col_names <- colnames(data)
+    
+    # Helper function to find the first matching column
+    select_best_match <- function(preferred, col_names, fallback = NULL) {
+      match <- preferred[preferred %in% col_names]
+      if (length(match) > 0) {
+        return(match[1])  # Use the first match
+      } else if (!is.null(fallback) && fallback %in% col_names) {
+        return(fallback)  # Use fallback if available
+      } else {
+        return(col_names[1])  # Default to the first column
+      }
+    }
+    
+    # Automatically select relevant columns
+    default_sort_col <- select_best_match(c("stat", "t"), col_names, fallback = col_names[2])
+    default_logFC_col <- select_best_match(c("log2FoldChange", "logFC"), col_names)
+    default_pval_col <- select_best_match(c("pvalue", "P.Value", "pval"), col_names)
+    
+    # Update selectInputs
+    updateSelectInput(session, "id_col", choices = col_names, selected = col_names[1])
+    updateSelectInput(session, "sort_col", choices = col_names, selected = default_sort_col)
+    updateSelectInput(session, "logFC_col", choices = col_names, selected = default_logFC_col)
+    updateSelectInput(session, "pval_col", choices = col_names, selected = default_pval_col)
+    
     return(data)
   })
   
-  # Validate the ID column exists in the dataset
-  validate_dataset <- function(data, id_col) {
-    if (!(id_col %in% colnames(data))) {
-      showNotification("Selected ID column does not exist in the dataset!", type = "error")
-      return(FALSE)  # Invalid dataset
-    }
-    return(TRUE)  # Valid dataset
-  }
   
-  # Reactive block to process the data once
+  # Processed Data
   processed_data <- reactive({
-    req(dataset(), input$id_col, input$keytype)  # Ensure the dataset and selections are available
-    data <- dataset()  # Get the raw dataset
-    id_col <- input$id_col  # Get the selected ID column
+    req(dataset(), input$id_col, input$keytype)
+    data <- dataset()
+    id_col <- input$id_col
     
-    # Validate the ID column exists
-    if (!validate_dataset(data, id_col)) return(NULL)
+    if (!(id_col %in% colnames(data))) {
+      showNotification("Selected ID column does not exist!", type = "error")
+      return(NULL)
+    }
     
-    # Process the data for GSEA and volcano
-    processed_data <- process_input_data(data, id = id_col, keytype = tolower(input$keytype))  # Convert keytype to lowercase
-    
-    return(processed_data)  # Return processed data
+    process_input_data(data, id = id_col, keytype = tolower(input$keytype))
   })
   
-  # Run GSEA analysis
+  # GSEA Analysis
   gsea_results <- eventReactive(input$run_gsea, {
     req(processed_data(), input$sort_col)
     
-    data <- processed_data()  # Use the processed data
-    id_col <- input$id_col  # Get the selected ID column
+    showNotification("Running GSEA analysis...", type = "message", duration = 5)
     
-    gene_sets <- get_gene_sets(input$keytype)  # Fetch gene sets based on the selected keytype
-    gsea_analysis(data, gene_sets, sorting_value_col_name = input$sort_col, name = "data")
+    data <- processed_data()
+    id_col <- isolate(input$id_col)  # Ensure the input is only read when the button is clicked
+    sort_col <- isolate(input$sort_col)
+    keytype <- isolate(input$keytype)
+    
+    gene_sets <- get_gene_sets(keytype)
+    
+    result <- gsea_analysis(data, gene_sets, sorting_value_col_name = sort_col, name = "data")
+    
+    showNotification("GSEA analysis complete!", type = "message", duration = 3)
+    
+    return(result)
   })
   
-  # Run Volcano plot
+  # Show a notification and disable the button when running GSEA
+  observeEvent(input$run_gsea, {
+    shinyjs::disable("run_gsea")  # Disable button
+    showNotification("Running GSEA analysis...", type = "message", duration = 5)
+    
+    # Trigger the GSEA analysis by calling gsea_results
+    gsea_results()  
+    
+    # Show completion message and re-enable button after GSEA finishes
+    showNotification("GSEA analysis complete!", type = "message", duration = 3)
+    shinyjs::enable("run_gsea")  # Re-enable button after completion
+  })
+  
+  # Volcano Plot
   volcano_results <- eventReactive(input$run_volcano, {
-    req(processed_data(), input$logFC_col, input$pval_col, input$stat_col)
-    data <- processed_data()  # Use the processed data
-    id_col <- input$id_col  # Get the selected ID column
-    plot_volcano_and_stripplot(data, keytype=input$keytype, logFC_col_name = input$logFC_col, pval_col_name = input$pval_col, stat_col_name = input$stat_col)
+    req(processed_data(), input$logFC_col, input$pval_col)
+    data <- processed_data()
+    plot_volcano(data, keytype=input$keytype, logFC_col_name = input$logFC_col, pval_col_name = input$pval_col)
   })
   
-  # Render GSEA plot
+  # Show a notification and disable the button when running GSEA
+  observeEvent(input$run_volcano, {
+    shinyjs::disable("run_volcano")  # Disable button
+    showNotification("Generating volcano plots...", type = "message", duration = 5)
+    
+    # Trigger the Volcano plot generation by calling gsea_results
+    #volcano_results()  
+    
+    # Show completion message and re-enable button after GSEA finishes
+    showNotification("Volcano plots complete!", type = "message", duration = 3)
+    shinyjs::enable("run_volcano")  # Re-enable button after completion
+  })
+  
+  # Render GSEA Plot
   output$gsea_plot <- renderPlot({
-    req(gsea_results())  # Ensure GSEA results are available
-    plot_gsea(gsea_results(), "data")  # Call the plot_gsea function with the results
-  })
+    req(gsea_results())
+    plot_gsea(gsea_results(), "data")
+  }, height = 500, width = 800)
   
-  # Render GSEA table
+  # Render GSEA Table
   output$gsea_table <- renderDT({
-    req(gsea_results())  # Ensure GSEA results are available
-    datatable(gsea_results())  # Use the data frame returned by gsea_analysis
+    req(gsea_results())
+    datatable(gsea_results(), options = list(pageLength = 10, scrollX = TRUE))
   })
   
-  # Render data table
+  # Render Data Table
   output$table <- renderDT({
-    req(dataset())  # Ensure dataset is available
-    datatable(dataset())
+    req(dataset())
+    datatable(dataset(), options = list(pageLength = 10, scrollX = TRUE))
   })
   
-  # Render volcano plot
+  # Render Volcano Plot
   output$volcano_plot <- renderPlot({
-    req(volcano_results())  # Ensure volcano results are available
+    req(volcano_results())
     volcano_results()
+  })
+  
+  # Download Dataset
+  output$download_data <- downloadHandler(
+    filename = function() { paste("dataset", Sys.Date(), ".csv", sep="") },
+    content = function(file) {
+      write.csv(dataset(), file, row.names = FALSE)
+    }
+  )
+  
+  # Download GSEA Results
+  output$download_gsea <- downloadHandler(
+    filename = function() { paste("GSEA_results", Sys.Date(), ".csv", sep="") },
+    content = function(file) {
+      write.csv(gsea_results(), file, row.names = FALSE)
+    }
+  )
+  # Observe file input change and reset selections when file is uploaded
+  observeEvent(input$file, {
+    req(input$file)  # Wait for file input
+    
+    # Helper function to find the first matching column
+    select_best_match <- function(preferred, col_names, fallback = NULL) {
+      match <- preferred[preferred %in% col_names]
+      if (length(match) > 0) {
+        return(match[1])  # Use the first match
+      } else if (!is.null(fallback) && fallback %in% col_names) {
+        return(fallback)  # Use fallback if available
+      } else {
+        return(col_names[1])  # Default to the first column
+      }
+    }
+    # Reset the selections after file is uploaded, setting them to default values
+    col_names <- colnames(dataset())
+    
+    # Automatically select relevant columns for new file
+    default_sort_col <- select_best_match(c("stat", "t"), col_names, fallback = col_names[2])
+    default_logFC_col <- select_best_match(c("log2FoldChange", "logFC"), col_names)
+    default_pval_col <- select_best_match(c("pvalue", "P.Value", "pval"), col_names)
+    
+    # Update selectInputs with default values
+    updateSelectInput(session, "id_col", choices = col_names, selected = col_names[1])
+    updateSelectInput(session, "sort_col", choices = col_names, selected = default_sort_col)
+    updateSelectInput(session, "logFC_col", choices = col_names, selected = default_logFC_col)
+    updateSelectInput(session, "pval_col", choices = col_names, selected = default_pval_col)
   })
 }
 
-# Run the application 
+# Run App
 shinyApp(ui = ui, server = server)
 
 
 
 
-#Ask:  I need to improve on the esthetics. E.g. the preview data table and gsea table should be in different tabs and not below each other, and there should be a button to help download them, the volcano plot should be displayed next to the gsea plot. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

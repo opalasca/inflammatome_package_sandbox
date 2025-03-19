@@ -262,6 +262,8 @@ gsea_analysis <- function(data, gene_sets, sorting_value_col_name, name="data"){
   gsea_results <- run_gsea(data, gene_sets, sorting_value_col_name)
   gsea_results_df <- gsea_results@result
   plot_gsea(gsea_results_df, name)
+  gsea_results_df=gsea_results_df[-c(10)] # Remove leading_edge column, due to issue when displaying the table
+  #gsea_results_df$leading_edge <- gsub("\n", "", gsea_results_df$leading_edge)
   return(gsea_results_df)
 }
 
@@ -296,105 +298,38 @@ plot_gsea <- function(gsea_result_df, name){
   # Wrap text at 32 characters
   gsea_result_df$Description <- str_wrap(gsea_result_df$Description, width = 35)
   
-  p <- ggplot(gsea_result_df, aes( x=NES, y = reorder(Description,NES))) + 
-    geom_point(aes(fill = NES, size = -log10(p.adjust)), shape = 21, colour = "black",alpha = 0.8) +
-    scale_fill_gradient2(midpoint = 0,low = "blue4",mid = "white",high = "red4",space = "Lab") +
+  p <- ggplot(gsea_result_df, aes(x = NES, y = reorder(Description, NES))) + 
+    geom_point(aes(fill = NES, size = -log10(p.adjust)), shape = 21, colour = "black", alpha = 0.8) +
+    scale_fill_gradient2(midpoint = 0, low = "blue4", mid = "white", high = "red4", space = "Lab") +
+    scale_size_continuous(range = c(4, 12)) +  # Increase point size range
     theme_light() + 
-    ylab(NULL) + xlab("NES") 
-
+    ylab(NULL) + 
+    xlab("NES") +
+    theme(
+      axis.text = element_text(size = 16),    # Increase axis text size
+      axis.title = element_text(size = 16),   # Increase axis title size
+      plot.title = element_text(size = 16),   # Increase plot title size (if you add a title)
+      legend.text = element_text(size = 16),  # Increase legend text size
+      legend.title = element_text(size = 16), # Increase legend title size
+      strip.text = element_text(size = 16),   # Increase facet text size if using facets
+      panel.grid.major = element_line(linewidth = 0.5, linetype = "dashed", colour = "grey90"),
+      panel.grid.minor = element_line(linewidth = 0.25, linetype = "dotted", colour = "grey90"),
+      plot.margin = margin(10, 10, 10, 10)  # Add some margin around the plot
+    )
+  
   # Add black dots for p.adjust < 0.05
   p <- p + geom_point(data = gsea_result_df[gsea_result_df$p.adjust < 0.05,], 
                       aes(x = NES, y = Description), 
-                      color = "black", size = 1)
+                      color = "black", size = 1)  # Make these points slightly bigger
+  
+  # Print the plot
   print(p)
   ggsave(paste0("figures/gsea_",name,".png"), p, h = 4.5, w = 5.8)
+  
 }
 
 
 # Volcano plot
-plot_volcano <- function(data, keytype="Ensembl", logFC_col_name="log2FoldChange", pval_col_name="pvalue", name="data"){ 
-  
-  theme_custom <- theme_classic() + theme(
-      plot.title = element_text(size = 8))
-  
-  keytype <- tolower(keytype)
-  
-  if (keytype == "ensembl") {
-  data <- data %>%
-    arrange(desc(.data[[pval_col_name]])) %>%
-    mutate(idx = row_number()) %>%
-    mutate(
-      top_2000 = if_else(id.mapped %in% filter(top2000, Position <= 2000)$ENSG.ID, "yes", "no"),
-      top_100 = if_else(id.mapped %in% filter(top2000, Position <= 100)$ENSG.ID, "yes", "no")
-    ) %>%
-    mutate(
-      top_2000 = factor(top_2000, levels = c("no", "yes")),  # Ensure "no" is plotted first
-      top_100 = factor(top_100, levels = c("no", "yes"))
-    )  %>%
-    mutate(
-      # **Cap -log10(p-value) at 20**
-      adj_pval = pmin(-log10(.data[[pval_col_name]]), 20),
-      # **Cap log fold change between -10 and 10**
-      adj_logFC = pmax(pmin(.data[[logFC_col_name]], 10), -10)
-    )}
-  #pval_col_name="P.Value"; logFC_col_name="logFC"; name="UC.proteomics" 
-  else{
-      data <- data %>%
-      arrange(desc(.data[[pval_col_name]])) %>%
-      mutate(idx = row_number()) %>%
-      mutate(
-        top_2000 = if_else(id.mapped %in% filter(top2000, Position <= 2000)$ENTREZID, "yes", "no"),
-        top_100 = if_else(id.mapped %in% filter(top2000, Position <= 100)$ENTREZID, "yes", "no")
-      ) %>%
-      mutate(
-        top_2000 = factor(top_2000, levels = c("no", "yes")),  # Ensure "no" is plotted first
-        top_100 = factor(top_100, levels = c("no", "yes"))
-      )  %>%
-      mutate(
-        # **Cap -log10(p-value) at 20**
-        adj_pval = pmin(-log10(.data[[pval_col_name]]), 20),
-        # **Cap log fold change between -10 and 10**
-        adj_logFC = pmax(pmin(.data[[logFC_col_name]], 10), -10)
-      )  }
-  
-  p1 <- ggplot(data %>% arrange(top_2000), aes(x = adj_logFC, y = adj_pval, color = top_2000 ))+ # , alpha = top_2000)) +
-    geom_point(size = .4, alpha=0.6) +
-    scale_color_manual(values = c("no" = "grey", "yes" = "red")) +
-    #scale_alpha_manual(values = c("no" = 0.5, "yes" = 0.5)) +
-    labs(
-      x = "Log Fold Change",
-      y = "-log10(P-Value)",
-      #title = paste0(name,", inflammatome (top 2000)")
-      title = paste0("inflammatome (top 2000)")
-    ) +
-    theme_custom
-    #coord_cartesian(ylim = c(0, 20))
-  
-  print(p1)
-  ggsave(paste0("figures/volcano_2000_",name,".png"), p1, height = 3, width = 3)
-  
-  p2 <- ggplot(data %>% arrange(top_100), aes(x = adj_logFC, y = adj_pval, color = top_100))+ #, alpha = top_100)) +
-    geom_point(size = .4, alpha=0.6) +
-    scale_color_manual(values = c("no" = "grey", "yes" = "red")) +
-    labs(
-      x = "Log Fold Change",
-      y = "-log10(P-Value)",
-      #title = paste0(name,", inflammation signature (top 100)")
-      title = paste0("inflammation signature (top 100)")
-      ) +
-    theme_custom
-    #coord_cartesian(ylim = c(0, 20))
-  
-  print(p2)
-  ggsave(paste0("figures/volcano_100_",name,".png"), p2, height = 3, width = 3)
-  
-  combined_plot <- p1 + p2 + plot_layout(ncol = 2,guides = "collect")
-  
-  # Print and save the combined plot
-  print(combined_plot)
-  ggsave(paste0("figures/volcano_",name,".png"), combined_plot, height = 3, width = 6)  # Wider panel
-  
-}
 
 plot_volcano_and_stripplot <- function(data,  keytype="Ensembl", logFC_col_name="log2FoldChange", pval_col_name="pvalue", stat_col_name="stat"){ 
   
@@ -522,6 +457,99 @@ plot_volcano_and_stripplot <- function(data,  keytype="Ensembl", logFC_col_name=
   
 }
 
+plot_volcano <- function(data, keytype="Ensembl", logFC_col_name="log2FoldChange", pval_col_name="pvalue", name="data"){ 
+  
+  # Define a custom theme with larger text sizes
+  theme_custom <- theme_classic() + theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 16), 
+    axis.text = element_text(size = 14), 
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 14),
+    plot.margin = margin(10, 10, 10, 10)  # Add some margin around the plot
+  )
+  
+  keytype <- tolower(keytype)
+  
+  if (keytype == "ensembl") {
+    data <- data %>%
+      arrange(desc(.data[[pval_col_name]])) %>%
+      mutate(idx = row_number()) %>%
+      mutate(
+        top_2000 = if_else(id.mapped %in% filter(top2000, Position <= 2000)$ENSG.ID, "yes", "no"),
+        top_100 = if_else(id.mapped %in% filter(top2000, Position <= 100)$ENSG.ID, "yes", "no")
+      ) %>%
+      mutate(
+        top_2000 = factor(top_2000, levels = c("no", "yes")),  # Ensure "no" is plotted first
+        top_100 = factor(top_100, levels = c("no", "yes"))
+      )  %>%
+      mutate(
+        # **Cap -log10(p-value) at 20**
+        adj_pval = pmin(-log10(.data[[pval_col_name]]), 20),
+        # **Cap log fold change between -10 and 10**
+        adj_logFC = pmax(pmin(.data[[logFC_col_name]], 10), -10)
+      )
+  } else {
+    data <- data %>%
+      arrange(desc(.data[[pval_col_name]])) %>%
+      mutate(idx = row_number()) %>%
+      mutate(
+        top_2000 = if_else(id.mapped %in% filter(top2000, Position <= 2000)$ENTREZID, "yes", "no"),
+        top_100 = if_else(id.mapped %in% filter(top2000, Position <= 100)$ENTREZID, "yes", "no")
+      ) %>%
+      mutate(
+        top_2000 = factor(top_2000, levels = c("no", "yes")),  # Ensure "no" is plotted first
+        top_100 = factor(top_100, levels = c("no", "yes"))
+      )  %>%
+      mutate(
+        # **Cap -log10(p-value) at 20**
+        adj_pval = pmin(-log10(.data[[pval_col_name]]), 20),
+        # **Cap log fold change between -10 and 10**
+        adj_logFC = pmax(pmin(.data[[logFC_col_name]], 10), -10)
+      )
+  }
+  
+  # Volcano plot for top 2000
+  p1 <- ggplot(data %>% arrange(top_2000), aes(x = adj_logFC, y = adj_pval, color = top_2000 )) + 
+    geom_point(size = 3, alpha = 0.6) +  # Increase point size
+    scale_color_manual(values = c("no" = "grey", "yes" = "red")) +
+    labs(
+      x = "Log Fold Change",
+      y = "-log10(P-Value)",
+      title = paste0("Inflammatome (Top 2000)")
+    ) +
+    theme_custom + 
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "black", size = 1) +  # Significance line
+    geom_vline(xintercept = 0, linetype = "dashed", color = "black", size = 1)  # Fold-change line
+  
+  # Save the plot
+  print(p1)
+  ggsave(paste0("figures/volcano_2000_", name, ".png"), p1, height = 5, width = 6, dpi = 300)
+  
+  # Volcano plot for top 100
+  p2 <- ggplot(data %>% arrange(top_100), aes(x = adj_logFC, y = adj_pval, color = top_100)) + 
+    geom_point(size = 3, alpha = 0.6) +  # Increase point size
+    scale_color_manual(values = c("no" = "grey", "yes" = "red")) +
+    labs(
+      x = "Log Fold Change",
+      y = "-log10(P-Value)",
+      title = paste0("Inflammation Signature (Top 100)")
+    ) +
+    theme_custom + 
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "black", size = 1) +  # Significance line
+    geom_vline(xintercept = 0, linetype = "dashed", color = "black", size = 1)  # Fold-change line
+  
+  # Save the plot
+  print(p2)
+  ggsave(paste0("figures/volcano_100_", name, ".png"), p2, height = 5, width = 6, dpi = 300)
+  
+  # Combine both plots (top 2000 and top 100)
+  combined_plot <- p1 + p2 + plot_layout(ncol = 2, guides = "collect")
+  
+  # Print and save the combined plot
+  print(combined_plot)
+  ggsave(paste0("figures/volcano_", name, ".png"), combined_plot, height = 5, width = 10, dpi = 300)  # Wider panel for combined plot
+}
 
 
 

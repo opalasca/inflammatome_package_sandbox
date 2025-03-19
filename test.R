@@ -35,8 +35,8 @@ plot_volcano(data, logFC_col_name = "logFC", pval_col_name = "P.Value", name="UC
 
 
 
-#install.packages("shiny")
-#library(shiny)
+install.packages("shiny")
+library(shiny)
 runGitHub("inflammatome_package_sandbox", "opalasca")
 runApp("app")
 

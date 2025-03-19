@@ -1,5 +1,17 @@
 # inflammatome_package_sandbox
 
+Shiny app for the inflammatomeR package
+
+Run the app by running the following code:
+
+```
+install.packages("shiny")
+library(shiny)
+runGitHub("inflammatome_package_sandbox", "opalasca")
+runApp("app")
+```
+
+
 R package accompanying the manuscript "The inflammatome: A meta-analysis of human genes regulated during inflammation"
 
 inflammatomeR is a collection of functions that can be used to assess the presence of inflammation in transcriptomics or proteomics data. 
@@ -18,5 +30,5 @@ Two types of input data:
 - a table with results from differential expression/abundance analysis (e.g. limma, DESeq2, limma-voom, edgeR, etc) 
 - a table with normalized gene/protein expression values (e.g. log2 normalized counts, rlog, vst, cpm, etc)
 
-Gene/protein identifiers accepted: Ensembl, Entrez, HGNC (gene symbol), UniProt, RefSeq. The ids must be unique. 
+Gene/protein identifiers accepted: Ensembl, Entrez, gene symbol (HGNC), UniProt, RefSeq. The ids must be unique. 
 Warning: if the data is transcript-level (e.g. RefSeq), with many transcript isoforms per gene, the data should be summarized to gene-level before using inflammatomeR.
