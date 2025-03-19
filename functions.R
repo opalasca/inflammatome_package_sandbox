@@ -17,16 +17,19 @@ if(length(new.packages)) BiocManager::install(new.packages)
 
 lapply(list.of.packages, library, character.only=TRUE)
 
-here::i_am("functions.R")
-figures_dir <- here("figures")
-fs::dir_create(figures_dir)
+#here::i_am("functions.R")
+#figures_dir <- here("figures")
+#fs::dir_create(figures_dir)
+figures_dir <- here()
 
 # Read inflammatome list -------------------------------
 data_file <- here("data", "ranked_list_inflammatome.tsv")
 if (file_exists(data_file)) {
   ranked.list <- read_tsv(data_file, show_col_types = FALSE)
 } else {
-  stop("Error: Data file not found. Ensure 'data/ranked_list_inflammatome.tsv' exists.")
+  data_url <- "https://github.com/opalasca/inflammatome_package_sandbox/blob/main/data/ranked_list_inflammatome.tsv"
+  data <- read_tsv(data_url, show_col_types = FALSE)
+  #stop("Error: Data file not found. Ensure 'data/ranked_list_inflammatome.tsv' exists.")
 }
 
 
@@ -324,7 +327,7 @@ plot_gsea <- function(gsea_result_df, name){
   
   # Print the plot
   print(p)
-  ggsave(paste0("figures/gsea_",name,".png"), p, h = 4.5, w = 5.8)
+  #ggsave(paste0("figures/gsea_",name,".png"), p, h = 4.5, w = 5.8)
   
 }
 
@@ -401,7 +404,7 @@ plot_volcano_and_stripplot <- function(data,  keytype="Ensembl", logFC_col_name=
     theme_custom
 
   #print(p1)
-  ggsave(paste0("figures/volcano_2000",".png"), p1, height = 3, width = 3)
+  #ggsave(paste0("figures/volcano_2000",".png"), p1, height = 3, width = 3)
   
   p2 <- ggplot(data %>% arrange(top_100), aes(x = adj_logFC, y = adj_pval, color = top_100))+ #, alpha = top_100)) +
     geom_point(size = .4, alpha=0.6) +
@@ -415,7 +418,7 @@ plot_volcano_and_stripplot <- function(data,  keytype="Ensembl", logFC_col_name=
     theme_custom
 
   #print(p2)
-  ggsave(paste0("figures/volcano_100",".png"), p2, height = 3, width = 3)
+  #ggsave(paste0("figures/volcano_100",".png"), p2, height = 3, width = 3)
   
   max_abs_stat <- max(abs(data[[stat_col_name]]), na.rm = TRUE)
   
@@ -444,16 +447,16 @@ plot_volcano_and_stripplot <- function(data,  keytype="Ensembl", logFC_col_name=
     theme_custom_strip_plot
   
   #print(p3)
-  ggsave(paste0("figures/strip_plot_2000",".png"), p3, height = 3, width = 3)
+  #ggsave(paste0("figures/strip_plot_2000",".png"), p3, height = 3, width = 3)
   
   #print(p4)
-  ggsave(paste0("figures/strip_plot_100",".png"), p4, height = 3, width = 3)
+  #ggsave(paste0("figures/strip_plot_100",".png"), p4, height = 3, width = 3)
   
   combined_plot <- p1 + p2 + p3 + p4 + plot_layout(ncol = 2, guides = "collect", heights = c(2, 1))
   
   # Print and save the combined plot
   print(combined_plot)
-  ggsave(paste0("figures/volcano",".png"), combined_plot, height = 3, width = 6)  # Wider panel
+  #ggsave(paste0("figures/volcano",".png"), combined_plot, height = 3, width = 6)  # Wider panel
   
 }
 
@@ -524,7 +527,7 @@ plot_volcano <- function(data, keytype="Ensembl", logFC_col_name="log2FoldChange
   
   # Save the plot
   print(p1)
-  ggsave(paste0("figures/volcano_2000_", name, ".png"), p1, height = 5, width = 6, dpi = 300)
+  #ggsave(paste0("figures/volcano_2000_", name, ".png"), p1, height = 5, width = 6, dpi = 300)
   
   # Volcano plot for top 100
   p2 <- ggplot(data %>% arrange(top_100), aes(x = adj_logFC, y = adj_pval, color = top_100)) + 
@@ -541,14 +544,14 @@ plot_volcano <- function(data, keytype="Ensembl", logFC_col_name="log2FoldChange
   
   # Save the plot
   print(p2)
-  ggsave(paste0("figures/volcano_100_", name, ".png"), p2, height = 5, width = 6, dpi = 300)
+  #ggsave(paste0("figures/volcano_100_", name, ".png"), p2, height = 5, width = 6, dpi = 300)
   
   # Combine both plots (top 2000 and top 100)
   combined_plot <- p1 + p2 + plot_layout(ncol = 2, guides = "collect")
   
   # Print and save the combined plot
   print(combined_plot)
-  ggsave(paste0("figures/volcano_", name, ".png"), combined_plot, height = 5, width = 10, dpi = 300)  # Wider panel for combined plot
+  #ggsave(paste0("figures/volcano_", name, ".png"), combined_plot, height = 5, width = 10, dpi = 300)  # Wider panel for combined plot
 }
 
 
