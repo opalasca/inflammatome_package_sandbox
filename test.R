@@ -14,6 +14,10 @@ igan <- read_tsv("data/test_datasets/02_GSE175759_IgAN_ctl.tsv",show_col_types =
 
 data <- process_input_data(igan,id="ENSG.ID", keytype="ensembl")
 gene_sets <- get_gene_sets("Ensembl")
+
+data <- process_input_data(igan,id="Gene.name", keytype="symbol")
+gene_sets <- get_gene_sets("symbol")
+
 gsea_results <- gsea_analysis(data, gene_sets, sorting_value_col_name = "stat", name="igan")
 plot_volcano(data, keytype="Ensembl", logFC_col_name = "log2FoldChange", pval_col_name = "pvalue")
 plot_volcano_and_stripplot(data, keytype="Ensembl", logFC_col_name = "log2FoldChange", pval_col_name = "pvalue", stat_col_name = "stat")
@@ -38,7 +42,7 @@ plot_volcano(data, logFC_col_name = "logFC", pval_col_name = "P.Value", name="UC
 install.packages("shiny")
 library(shiny)
 runGitHub("inflammatome_package_sandbox", "opalasca")
-runApp("app")
+#runApp("app")
 
 
 ## More datasets to test ------------------------------------------------------------------

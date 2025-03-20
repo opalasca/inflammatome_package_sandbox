@@ -1,6 +1,6 @@
 # Remove setwd line! 
-dir="~/Desktop/Work/inflammatome/inflammatome_resource"
-setwd(dir)
+#dir="~/Desktop/Work/inflammatome/inflammatome_resource"
+#setwd(dir)
 
 
 #figures=paste0(dir,"/figures/")
@@ -20,7 +20,7 @@ lapply(list.of.packages, library, character.only=TRUE)
 #here::i_am("functions.R")
 #figures_dir <- here("figures")
 #fs::dir_create(figures_dir)
-figures_dir <- here()
+#figures_dir <- here()
 
 # Read inflammatome list -------------------------------
 data_file <- here("data", "ranked_list_inflammatome.tsv")
@@ -61,8 +61,15 @@ prepare_data <- function(data, id_col_name, keytype, mean_expr_col_name=NULL, pv
 
 
 # Preprocess input files  
-process_input_data <- function(data, id_col_name, keytype, mean_expr_col_name=NULL, pval_col_name=NULL){
+process_input_data_old <- function(data, id_col_name, keytype, mean_expr_col_name=NULL, pval_col_name=NULL){
   
+  # Validate inputs
+  if (missing(data) || missing(id) || missing(keytype)) {
+    stop("Missing required inputs")
+  }
+  
+  tryCatch({
+    
   keytype <- tolower(keytype)
   
   if (keytype == "uniprot") {
@@ -172,8 +179,69 @@ process_input_data <- function(data, id_col_name, keytype, mean_expr_col_name=NU
   }
   
   return(data)
-  
+  }, error = function(e) {
+    stop("Error: ", e$message)
+  })
 }
+
+process_input_data <- function(data, id_col_name, keytype) {
+  
+  # Validate inputs
+  if (missing(data) || missing(id_col_name) || missing(keytype)) {
+    stop("Missing required inputs")
+  }
+  
+  tryCatch({
+    keytype <- tolower(keytype)
+    valid_keytypes <- c("uniprot", "symbol", "refseq", "entrez", "ensembl")
+    
+    if (!keytype %in% valid_keytypes) {
+      stop("Invalid keytype provided.")
+    }
+    
+    # Mapping dictionary for keytypes
+    keytype_mapping <- list(
+      uniprot = "UNIPROT",
+      symbol = "SYMBOL",
+      refseq = "REFSEQ",
+      entrez = "ENTREZID",
+      ensembl = "ENSEMBL"
+    )
+    
+    # Direct assignment for ENTREZID & ENSEMBL (no conversion needed)
+    if (keytype %in% c("entrez", "ensembl")) {
+      data$id.mapped <- data[[id_col_name]]
+      return(data)
+    }
+    
+    # Attempt ID conversion
+    id.mapping <- bitr(
+      data[[id_col_name]], 
+      fromType = keytype_mapping[[keytype]], 
+      toType = "ENTREZID", 
+      OrgDb = org.Hs.eg.db
+    )
+    
+    # Merge mapped IDs
+    data <- merge(data, id.mapping, by.x = id_col_name, by.y = keytype_mapping[[keytype]], all.x = TRUE)
+    
+    # Ensure unique ENTREZID, keeping the first sorted entry
+    data <- data %>%
+      group_by(ENTREZID) %>%
+      arrange(!!sym(id_col_name)) %>%
+      slice(1) %>%
+      ungroup()
+    
+    # Assign mapped ID column
+    data$id.mapped <- data$ENTREZID
+    
+    return(data)
+  }, error = function(e) {
+    warning("⚠️ Error in processing identifiers: ", e$message)
+    return(NULL)
+  })
+}
+
 
 # Extract gene sets for GSEA
 get_gene_sets <- function(keytype){ 
@@ -272,7 +340,7 @@ gsea_analysis <- function(data, gene_sets, sorting_value_col_name, name="data"){
 
 
 # Run GSEA
-run_gsea <- function(data, gene_sets, sorting_value_col_name){
+run_gsea_old <- function(data, gene_sets, sorting_value_col_name){
   data <- data[order(data[[sorting_value_col_name]], decreasing = TRUE), ]
   ranked_gene_list <- setNames(data[[sorting_value_col_name]], data$id.mapped)
   set.seed(100)
@@ -284,6 +352,35 @@ run_gsea <- function(data, gene_sets, sorting_value_col_name){
     pvalueCutoff = 10,
     eps = 0
   )
+  return(gsea_results)
+}
+
+run_gsea <- function(data, gene_sets, sorting_value_col_name) {
+  # Filter out rows with NA in id.mapped or sorting column
+  data <- data[!is.na(data$id.mapped) & !is.na(data[[sorting_value_col_name]]), ]
+  
+  # Check if we have any valid data left for GSEA
+  if (nrow(data) == 0) {
+    stop("No valid data available for GSEA analysis after filtering NAs.")
+  }
+  
+  # Order the data by sorting value column
+  data <- data[order(data[[sorting_value_col_name]], decreasing = TRUE), ]
+  
+  # Create the ranked gene list for GSEA
+  ranked_gene_list <- setNames(data[[sorting_value_col_name]], data$id.mapped)
+  
+  # Run GSEA
+  set.seed(100)
+  gsea_results <- GSEA(
+    ranked_gene_list, 
+    TERM2GENE = gene_sets, 
+    minGSSize = 0, 
+    maxGSSize = 2000, 
+    pvalueCutoff = 10,
+    eps = 0
+  )
+  
   return(gsea_results)
 }
 

@@ -8,7 +8,6 @@ Run the app by running the following code:
 install.packages("shiny")
 library(shiny)
 runGitHub("inflammatome_package_sandbox", "opalasca")
-runApp("app")
 ```
 
 
