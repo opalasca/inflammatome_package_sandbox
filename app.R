@@ -3,7 +3,7 @@
 # Install packages (if not already present) and Load libraries ---------------------------------------------------------------
 list.of.packages <- c("shiny","DT","readr","shinyjs","shinycssloaders")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-if(length(new.packages)) BiocManager::install(new.packages)
+#if(length(new.packages)) BiocManager::install(new.packages)
 
 lapply(list.of.packages, library, character.only=TRUE)
 
